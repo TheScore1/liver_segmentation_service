@@ -1,0 +1,9 @@
+streamlit
+torch
+torchvision
+numpy
+PIL
+matplotlib.pyplot
+totchvision
+monai
+pillow
