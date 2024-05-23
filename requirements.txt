@@ -1,8 +1,7 @@
 streamlit
 torch
 torchvision
-numpy
-matplotlib.pyplot
-totchvision
 monai
+matplotlib
 pillow
+numpy
