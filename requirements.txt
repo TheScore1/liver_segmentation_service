@@ -5,3 +5,4 @@ monai
 matplotlib
 pillow
 numpy
+nibabel
