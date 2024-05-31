@@ -78,7 +78,7 @@ st.write("Upload an image to get the liver segmentation mask.")
 
 # Загрузка модели
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_path = "e-18-iou-1.4925-liver_segmentation_model.pth"
+model_path = "e-18-liver_segmentation_model.pth"
 model = load_model(model_path, device)
 
 # Загрузка изображения
