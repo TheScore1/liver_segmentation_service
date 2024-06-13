@@ -10,6 +10,7 @@ import time
 import tempfile
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+from sklearn.metrics import jaccard_score
 
 # Загрузка сохраненной модели
 def load_model(model_path, device):
@@ -45,12 +46,14 @@ def predict_mask(image, model, device):
     return pred
 
 # Отображение изображений и масок
-def show_image_and_mask(image, mask):
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+def show_image_and_masks(image, original_mask, predicted_mask):
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     axes[0].imshow(image, cmap='gray')
     axes[0].set_title("Input Image")
-    axes[1].imshow(mask, cmap='gray')
-    axes[1].set_title("Predicted Mask")
+    axes[1].imshow(original_mask, cmap='gray')
+    axes[1].set_title("Original Mask")
+    axes[2].imshow(predicted_mask, cmap='gray')
+    axes[2].set_title("Predicted Mask")
     st.pyplot(fig)
 
 # Функция для загрузки и обработки NIfTI файлов
@@ -71,6 +74,11 @@ def normalize_nifti_image(nifti_slice):
     nifti_slice = (nifti_slice * 255).astype(np.uint8)
     return nifti_slice
 
+# Функция для подсчета индекса жаккара
+def calculate_jaccard_index(original_mask, predicted_mask):
+    original_mask_flat = original_mask.flatten()
+    predicted_mask_flat = (predicted_mask > 0.5).astype(np.uint8).flatten()
+    return jaccard_score(original_mask_flat, predicted_mask_flat, average='binary')
 
 # Настройки Streamlit
 st.title("Liver Segmentation using UNet")
@@ -94,7 +102,6 @@ if uploaded_file is not None:
             selected_slice = nifti_data[:, :, slice_idx]
             normalized_slice = normalize_nifti_image(selected_slice)
             image = Image.fromarray(normalized_slice, 'L')
-            ##image = Image.fromarray(np.uint8((selected_slice - selected_slice.min()) * 255 / (selected_slice.max() - selected_slice.min())), 'L')
         else:
             st.error("Failed to load NIfTI file.")
     else:
@@ -119,4 +126,47 @@ if uploaded_file is not None:
     text_placeholder.empty()
 
     # Отображение результата
-    show_image_and_mask(selected_slice, mask)
+    show_image_and_masks(selected_slice, np.zeros_like(mask), mask)
+
+# Загрузка изображения и маски для расчета индекса Жаккара
+st.write("Upload an image and the corresponding ground truth mask to calculate the Jaccard index.")
+
+uploaded_image_file = st.file_uploader("Choose an image for Jaccard calculation (jpg or nii)...", type=["jpg", "png", "nii"], key="image_file")
+uploaded_mask_file = st.file_uploader("Choose the corresponding mask (jpg or nii)...", type=["jpg", "png", "nii"], key="mask_file")
+
+if uploaded_image_file is not None and uploaded_mask_file is not None:
+    if uploaded_image_file.name.endswith(".nii") and uploaded_mask_file.name.endswith(".nii"):
+        # Обработка NIfTI файла
+        nifti_image_data = load_nifti_file(uploaded_image_file)
+        nifti_mask_data = load_nifti_file(uploaded_mask_file)
+        if nifti_image_data is not None and nifti_mask_data is not None:
+            num_slices = nifti_image_data.shape[2]
+            slice_idx = st.slider("Select Slice for Jaccard", 0, num_slices - 1, num_slices // 2, key="jaccard_slider")
+            selected_image_slice = nifti_image_data[:, :, slice_idx]
+            selected_mask_slice = nifti_mask_data[:, :, slice_idx]
+            normalized_image_slice = normalize_nifti_image(selected_image_slice)
+            normalized_mask_slice = normalize_nifti_image(selected_mask_slice)
+            image = Image.fromarray(normalized_image_slice, 'L')
+            original_mask = normalized_mask_slice
+        else:
+            st.error("Failed to load NIfTI files.")
+    else:
+        # Обработка jpg файлов
+        image = Image.open(uploaded_image_file)
+        original_mask = Image.open(uploaded_mask_file).convert('L')
+        selected_image_slice = np.array(image)
+        original_mask = np.array(original_mask)
+
+    # Предсказание маски
+    predicted_mask = predict_mask(image, model, device)
+
+    # Ensure masks are binary
+    original_mask_binary = (original_mask > 127).astype(np.uint8)
+    predicted_mask_binary = (predicted_mask > 0.5).astype(np.uint8)
+
+    # Расчет индекса Жаккара
+    jaccard_index = calculate_jaccard_index(original_mask_binary, predicted_mask_binary)
+    st.write(f"Jaccard Index: {jaccard_index:.4f}")
+
+    # Отображение результата
+    show_image_and_masks(selected_image_slice, original_mask_binary, predicted_mask_binary)
